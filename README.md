@@ -15,6 +15,7 @@ Este proyecto utiliza un ESP32 para leer tarjetas RFID RC522 y registrar los dat
 | RC522 RST   | GPIO 22    |
 | LED         | GPIO 25    |
 | Buzzer      | GPIO 26    |
+| Button      | GPIO 27    |
 
 
 ## Configuración de Google Sheets y Apps Script
