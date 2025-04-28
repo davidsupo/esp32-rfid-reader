@@ -6,6 +6,7 @@
 #include <HTTPClient.h>
 #include <SPI.h>
 #include <MFRC522.h>
+#include <Preferences.h>
 
 // Configuración de pines
 #define SDA_PIN 4
@@ -14,9 +15,12 @@
 #define RST_PIN 22
 #define LED_PIN 25
 #define BUZZER_PIN 26
+#define BUTTON_PIN 27
 
 // Configuración del LCD
 LiquidCrystal_PCF8574 lcd(0x27);
+
+Preferences preferences;
 
 // Configuración de red WiFi
 const char* ssid = "SSID";
@@ -41,6 +45,7 @@ void setup() {
 
   pinMode(LED_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
   digitalWrite(LED_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
 
@@ -58,6 +63,7 @@ void setup() {
   
   // Iniciar cliente NTP
   timeClient.begin();
+  preferences.begin("rfid-data", false);
 
   // Inicializar clave RFID
   for (byte i = 0; i < 6; i++) key.keyByte[i] = 0xFF;
@@ -86,14 +92,59 @@ void loop() {
     } else {
       updateLCDLine(2, "Enviando datos...");
       digitalWrite(LED_PIN, HIGH);
-      sendToGoogleSheets(cardData);
+      // sendToGoogleSheets(cardData);
+      saveCardData(cardData, horas, minutos, segundos);
     }
 
     mfrc522.PICC_HaltA();
     mfrc522.PCD_StopCrypto1();
   }
 
+  // Verificar si el pulsador fue presionado
+  if (digitalRead(BUTTON_PIN) == LOW) { // LOW indica que el botón está presionado
+    delay(200); // Anti-rebote
+    printStoredCards(); // Llamar al método para enviar los registros
+  }
+
   delay(1000); // Actualizar cada segundo
+}
+
+void saveCardData(const String &idTarjeta, int horas, int minutos, int segundos) {
+  int count = preferences.getInt("count", 0); // Leer el contador actual
+  String key = "card" + String(count);       // Generar una clave única
+
+  // Crear un registro con el formato "ID:HH:MM:SS"
+  String registro = idTarjeta + ":" + String(horas) + ":" + String(minutos) + ":" + String(segundos);
+
+  preferences.putString(key.c_str(), registro); // Guardar el registro en la memoria
+  preferences.putInt("count", count + 1);       // Incrementar el contador
+
+  Serial.println("Registro guardado: " + registro);
+  Serial.println("Total de registros guardados: " + String(count + 1));
+}
+
+void printStoredCards() {
+  int count = preferences.getInt("count", 0);
+  Serial.println("Registros almacenados:");
+
+  String registros = ""; // String para almacenar todos los registros
+
+  for (int i = 0; i < count; i++) {
+    String key = "card" + String(i);
+    String registro = preferences.getString(key.c_str(), "N/A");
+    Serial.println("Registro " + String(i) + ": " + registro);
+
+    // Agregar el registro al string, separado por ";"
+    if (i > 0) registros += ";"; // Agregar delimitador si no es el primer registro
+    registros += registro;
+  }
+
+  // Enviar todos los registros a Google Sheets
+  if (registros.length() > 0) {
+    sendToGoogleSheets(registros);
+  } else {
+    Serial.println("No hay registros para enviar.");
+  }
 }
 
 // Función para leer un bloque de la tarjeta
@@ -117,19 +168,19 @@ String read_block(byte block, MFRC522::MIFARE_Key &key) {
 }
 
 // Función para enviar datos a Google Sheets
-void sendToGoogleSheets(String idTarjeta) {
+void sendToGoogleSheets(String registros) {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    String url = googleScriptUrl + "?id=" + idTarjeta;
+    String url = googleScriptUrl + "?registros=" + registros;
 
     http.begin(url);
     int httpCode = http.GET();
 
     if (httpCode > 0) {
-      updateLCDLine(2, "Bienvenido!      ");
+      updateLCDLine(2, "Datos enviados!");
       digitalWrite(BUZZER_PIN, HIGH);
     } else {
-      updateLCDLine(2, "Error: pasa de nuevo");
+      updateLCDLine(2, "Error al enviar");
       blinkBuzzer(2, 200);
     }
 

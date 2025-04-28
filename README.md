@@ -32,10 +32,20 @@ Este proyecto utiliza un ESP32 para leer tarjetas RFID RC522 y registrar los dat
 ```javascript
 function doGet(e) {
   var sheet = SpreadsheetApp.openById("TU_SHEET_ID_AQUI").getActiveSheet();
-  var idTarjeta = e.parameter.id;
-  var fechaHora = new Date();
+  var registros = e.parameter.registros;
 
-  sheet.appendRow([idTarjeta, fechaHora]);
+  if (registros) {
+    var listaRegistros = registros.split(";");
+    listaRegistros.forEach(function(registro) {
+      var datos = registro.split(":");
+      if (datos.length === 4) {
+        var idTarjeta = datos[0];
+        var hora = datos[1] + ":" + datos[2] + ":" + datos[3];
+        var fechaHora = new Date();
+        sheet.appendRow([idTarjeta, hora, fechaHora]);
+      }
+    });
+  }
 
   return ContentService.createTextOutput("Datos recibidos correctamente");
 }
