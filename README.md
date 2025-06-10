@@ -39,11 +39,12 @@ function doGet(e) {
     var listaRegistros = registros.split(";");
     listaRegistros.forEach(function(registro) {
       var datos = registro.split(":");
-      if (datos.length === 4) {
+      if (datos.length === 7) {
         var idTarjeta = datos[0];
-        var hora = datos[1] + ":" + datos[2] + ":" + datos[3];
+        var fecha = datos[1] + "/" + datos[2] + "/" + datos[3];
+        var hora = datos[4] + ":" + datos[5] + ":" + datos[6];
         var fechaHora = new Date();
-        sheet.appendRow([idTarjeta, hora, fechaHora]);
+        sheet.appendRow([idTarjeta, fecha, hora, fechaHora]);
       }
     });
   }

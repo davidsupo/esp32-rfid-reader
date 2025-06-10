@@ -30,6 +30,7 @@ const String googleScriptUrl = "SCRIPT_URL";
 // Configuración de NTP (Hora actual)
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", -5 * 3600, 60000);  // UTC-5 (Lima)
+struct tm timeinfo;    // Estructura para guardar fecha completa
 
 // Configuración del lector RFID
 MFRC522 mfrc522(SS_PIN, RST_PIN);
@@ -75,9 +76,14 @@ void loop() {
   updateLCDLine(2);
   // Actualizar hora NTP y mostrar en LCD
   timeClient.update();
-  int horas = timeClient.getHours();
-  int minutos = timeClient.getMinutes();
-  int segundos = timeClient.getSeconds();
+  time_t epochTime = timeClient.getEpochTime();
+  localtime_r(&epochTime, &timeinfo);
+  int dia = timeinfo.tm_mday;
+  int mes = timeinfo.tm_mon + 1;     // Mes es 0-11, añadimos 1
+  int anio = timeinfo.tm_year + 1900; // Año es desde 1900
+  int horas = timeinfo.tm_hour;
+  int minutos = timeinfo.tm_min;
+  int segundos = timeinfo.tm_sec;
 
   lcd.setCursor(0, 1);
   lcd.print("Hora: ");
@@ -93,7 +99,7 @@ void loop() {
       updateLCDLine(2, "Enviando datos...");
       digitalWrite(LED_PIN, HIGH);
       // sendToGoogleSheets(cardData);
-      saveCardData(cardData, horas, minutos, segundos);
+      saveCardData(cardData, dia, mes, anio, horas, minutos, segundos);
     }
 
     mfrc522.PICC_HaltA();
@@ -109,12 +115,18 @@ void loop() {
   delay(1000); // Actualizar cada segundo
 }
 
-void saveCardData(const String &idTarjeta, int horas, int minutos, int segundos) {
+void saveCardData(const String &idTarjeta, int dia, int mes, int anio, int horas, int minutos, int segundos) {
   int count = preferences.getInt("count", 0); // Leer el contador actual
   String key = "card" + String(count);       // Generar una clave única
 
   // Crear un registro con el formato "ID:HH:MM:SS"
-  String registro = idTarjeta + ":" + String(horas) + ":" + String(minutos) + ":" + String(segundos);
+  String registro = idTarjeta + ":" +
+                  String(dia) + ":" +
+                  String(mes) + ":" +
+                  String(anio) + ":" +
+                  String(horas) + ":" +
+                  String(minutos) + ":" +
+                  String(segundos);
 
   preferences.putString(key.c_str(), registro); // Guardar el registro en la memoria
   preferences.putInt("count", count + 1);       // Incrementar el contador
@@ -179,6 +191,9 @@ void sendToGoogleSheets(String registros) {
     if (httpCode > 0) {
       updateLCDLine(2, "Datos enviados!");
       digitalWrite(BUZZER_PIN, HIGH);
+
+      // Borrar registros después de enviarlos con éxito
+      clearStoredCards();
     } else {
       updateLCDLine(2, "Error al enviar");
       blinkBuzzer(2, 200);
@@ -208,4 +223,21 @@ void blinkBuzzer(int times, int delayMs) {
     digitalWrite(BUZZER_PIN, LOW);
     delay(delayMs);
   }
+}
+
+// Función para borrar todos los registros almacenados
+void clearStoredCards() {
+  int count = preferences.getInt("count", 0);
+  
+  // Borrar cada registro
+  for (int i = 0; i < count; i++) {
+    String key = "card" + String(i);
+    preferences.remove(key.c_str());
+  }
+  
+  // Reiniciar el contador a cero
+  preferences.putInt("count", 0);
+  
+  Serial.println("Registros borrados después de enviarlos");
+  updateLCDLine(3, "Registros borrados");
 }
